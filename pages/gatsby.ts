@@ -10,6 +10,7 @@ import {
   getLineContent,
   measureCanvasTextWidth,
 } from './diagnostic-utils.ts'
+import { clearNavigationReport, publishNavigationReport as publishHashReport } from './report-utils.ts'
 
 const book = document.getElementById('book')!
 const slider = document.getElementById('slider') as HTMLInputElement
@@ -140,7 +141,6 @@ type JoinedTextDiff = {
 
 declare global {
   interface Window {
-    __GATSBY_READY__?: boolean
     __GATSBY_REPORT__?: GatsbyReport
   }
 }
@@ -189,12 +189,6 @@ diagnosticDiv.style.wordWrap = 'break-word'
 diagnosticDiv.style.overflowWrap = 'break-word'
 diagnosticDiv.textContent = normalizedText
 document.body.appendChild(diagnosticDiv)
-
-const reportEl = document.createElement('pre')
-reportEl.id = 'gatsby-report'
-reportEl.hidden = true
-reportEl.dataset['ready'] = '0'
-document.body.appendChild(reportEl)
 
 const params = new URLSearchParams(location.search)
 const reportMode = params.get('report') === '1'
@@ -254,8 +248,7 @@ function toNavigationReport(report: GatsbyReport): GatsbyNavigationReport {
 
 function publishNavigationReport(report: GatsbyReport): void {
   const navigationReport = toNavigationReport(report)
-  const encoded = encodeURIComponent(JSON.stringify(navigationReport))
-  history.replaceState(null, '', `${location.pathname}${location.search}#report=${encoded}`)
+  publishHashReport(navigationReport)
 }
 
 function buildSegmentSpans(preparedText: PreparedTextWithSegments): SegmentSpan[] {
@@ -671,11 +664,7 @@ function setWidth(width: number) {
     stats.textContent = `Pretext: ${msPretext.toFixed(2)}ms (${Math.round(predictedHeight)}px) | DOM: ${msDOM.toFixed(1)}ms (${Math.round(actualHeight)}px) | Diff: ${diffStr} | ${text.length.toLocaleString()} chars`
   }
 
-  const reportJson = JSON.stringify(report)
-  reportEl.textContent = reportJson
-  reportEl.dataset['ready'] = '1'
   window.__GATSBY_REPORT__ = report
-  window.__GATSBY_READY__ = true
   publishNavigationReport(report)
 }
 
@@ -693,11 +682,9 @@ controlsEl.addEventListener('mousemove', (e) => {
   setWidth(width)
 })
 
-window.__GATSBY_READY__ = false
 window.__GATSBY_REPORT__ = withRequestId({ status: 'error', message: 'Pending initial layout' })
-reportEl.textContent = ''
 stats.textContent = 'Loading...'
-history.replaceState(null, '', `${location.pathname}${location.search}`)
+clearNavigationReport()
 
 const initialWidth = parseInitialWidth()
 
@@ -712,10 +699,7 @@ async function init() {
     const message = error instanceof Error ? error.message : String(error)
     stats.textContent = `Error: ${message}`
     const report = withRequestId({ status: 'error', message } satisfies GatsbyReport)
-    reportEl.textContent = JSON.stringify(report)
-    reportEl.dataset['ready'] = '1'
     window.__GATSBY_REPORT__ = report
-    window.__GATSBY_READY__ = true
     publishNavigationReport(report)
   }
 }

@@ -6,6 +6,7 @@ import {
   type PreparedTextWithSegments,
 } from '../src/layout.ts'
 import { getDiagnosticUnits } from './diagnostic-utils.ts'
+import { clearNavigationReport, publishNavigationReport } from './report-utils.ts'
 import { TEXTS, SIZES, WIDTHS } from '../src/test-data.ts'
 
 const FONTS = [
@@ -51,8 +52,6 @@ type AccuracyReport = {
   message?: string
 }
 
-type AccuracyNavigationReport = AccuracyReport
-
 type EnvironmentFingerprint = {
   userAgent: string
   devicePixelRatio: number
@@ -75,7 +74,6 @@ type EnvironmentFingerprint = {
 
 declare global {
   interface Window {
-    __ACCURACY_READY__?: boolean
     __ACCURACY_REPORT__?: AccuracyReport
   }
 }
@@ -84,11 +82,6 @@ const params = new URLSearchParams(location.search)
 const requestId = params.get('requestId') ?? undefined
 const includeFullRows = params.get('full') === '1'
 const reportEndpoint = params.get('reportEndpoint')
-const reportEl = document.createElement('pre')
-reportEl.id = 'accuracy-report'
-reportEl.hidden = true
-reportEl.dataset['ready'] = '0'
-document.body.appendChild(reportEl)
 
 function withRequestId<T extends AccuracyReport>(report: T): AccuracyReport {
   return requestId === undefined ? report : { ...report, requestId }
@@ -118,10 +111,7 @@ function getEnvironmentFingerprint(): EnvironmentFingerprint {
 
 function publishReport(report: AccuracyReport): void {
   const reportJson = JSON.stringify(report)
-  reportEl.textContent = reportJson
-  reportEl.dataset['ready'] = '1'
   window.__ACCURACY_REPORT__ = report
-  window.__ACCURACY_READY__ = true
   if (!includeFullRows) {
     publishNavigationReport(report)
   }
@@ -134,13 +124,6 @@ function publishReport(report: AccuracyReport): void {
     })
   }
 }
-
-function publishNavigationReport(report: AccuracyReport): void {
-  const navigationReport: AccuracyNavigationReport = report
-  const encoded = encodeURIComponent(JSON.stringify(navigationReport))
-  history.replaceState(null, '', `${location.pathname}${location.search}#report=${encoded}`)
-}
-
 function getBrowserLines(
   prepared: PreparedTextWithSegments,
   div: HTMLDivElement,
@@ -266,11 +249,8 @@ function runSweep(): { total: number, mismatches: Mismatch[], rows: AccuracyRow[
 function render() {
   const root = document.getElementById('root')!
   root.innerHTML = '<p>Running sweep...</p>'
-  window.__ACCURACY_READY__ = false
   window.__ACCURACY_REPORT__ = withRequestId({ status: 'error', message: 'Pending sweep' })
-  reportEl.textContent = ''
-  reportEl.dataset['ready'] = '0'
-  history.replaceState(null, '', `${location.pathname}${location.search}`)
+  clearNavigationReport()
 
   requestAnimationFrame(() => {
     try {
